@@ -3,6 +3,15 @@ provider "google" {
   region  = var.region
 }
 
+data "google_client_config" "default" {}
+
+
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.primary.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+}
+
 # VPC and Networking
 resource "google_compute_network" "vpc" {
   name                    = var.vpc_name
@@ -53,6 +62,32 @@ resource "google_compute_firewall" "allow_internal" {
   source_ranges = [var.subnet_cidr]
 }
 
+#resource "google_compute_firewall" "deny_external_ip_access" {
+#  name    = "deny-external-ip-access"
+#  network = google_compute_network.vpc.name
+#
+#  deny {
+#    protocol = "all"
+#  }
+#
+#  source_ranges = ["0.0.0.0/0"]
+#
+#  target_tags = ["no-external-ip"]
+#}
+
+resource "google_compute_firewall" "allow_wsl_and_localhost" {
+  name    = "allow-wsl-and-localhost"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"] 
+  }
+
+  source_ranges = ["172.30.226.117/32", "127.0.0.1/32"]
+  target_tags   = ["no-external-ip"]
+}
+
 # GKE Cluster
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
@@ -74,22 +109,32 @@ resource "google_container_cluster" "primary" {
     cluster_ipv4_cidr_block  = "/16"
     services_ipv4_cidr_block = "/22"
   }
+
+  deletion_protection = false 
 }
 
 resource "google_container_node_pool" "primary_nodes" {
   name       = var.node_pool_name
   location   = var.region
   cluster    = google_container_cluster.primary.name
-  node_count = 2
+  node_count = 1
 
   node_config {
     preemptible  = true
-    machine_type = "e2-medium"
+    machine_type = "e2-micro"
 
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
+
+    tags = ["no-external-ip"]
   }
+}
+
+# Create a delay
+resource "time_sleep" "wait_for_kubernetes" {
+  depends_on = [google_container_node_pool.primary_nodes]
+  create_duration = "30s"
 }
 
 # IAM Roles and Policies
@@ -104,12 +149,27 @@ resource "google_service_account" "gke_sa" {
   display_name = "GKE Service Account"
 }
 
-# Kubernetes Resources
+# Kubernetes Namespace
 resource "kubernetes_namespace" "assignment" {
+  depends_on = [time_sleep.wait_for_kubernetes]
   metadata {
     name = "assignment"
   }
 }
+
+# Kubernetes Deployment
+resource "google_compute_firewall" "allow_kubernetes_api" {
+  name    = "allow-kubernetes-api"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]  # Change to your IP range for security
+}
+
 
 resource "kubernetes_deployment" "assignment" {
   metadata {
@@ -147,6 +207,7 @@ resource "kubernetes_deployment" "assignment" {
   }
 }
 
+# Kubernetes Service
 resource "kubernetes_service" "assignment" {
   metadata {
     name      = "assignment-service"
@@ -167,12 +228,14 @@ resource "kubernetes_service" "assignment" {
   }
 }
 
-resource "kubernetes_ingress" "assignment" {
+# Kubernetes Ingress
+# Kubernetes Ingress
+resource "kubernetes_ingress_v1" "assignment" {
   metadata {
     name      = "assignment-ingress"
     namespace = kubernetes_namespace.assignment.metadata[0].name
     annotations = {
-      "kubernetes.io/ingress.class" = "gce"
+      "kubernetes.io/ingress.class" = "gce"  
     }
   }
 
@@ -180,25 +243,18 @@ resource "kubernetes_ingress" "assignment" {
     rule {
       http {
         path {
-          path = "/*"
+          path = "/"  
+          path_type = "Prefix"  
           backend {
-            service_name = kubernetes_service.assignment.metadata[0].name
-            service_port = 80
+            service {
+              name = kubernetes_service.assignment.metadata[0].name
+              port {
+                number = 80
+              }
+            }
           }
         }
       }
-    }
-  }
-}
-
-# Terraform Policy as Code
-resource "google_organization_policy" "restrict_vm_external_ips" {
-  org_id     = var.org_id
-  constraint = "compute.vmExternalIpAccess"
-
-  list_policy {
-    deny {
-      all = true
     }
   }
 }

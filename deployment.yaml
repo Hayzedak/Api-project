@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assignment-deployment
+  namespace: assignment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: assignment
+  template:
+    metadata:
+      labels:
+        app: assignment
+    spec:
+      containers:
+      - name: assignment
+        image: gcr.io/my-assignment-432222/assignment-api:latest
+        ports:
+        - containerPort: 3000
