@@ -36,7 +36,7 @@ jobs:
       run: gcloud info
 
     - name: Enable Artifact Registry API
-      run: gcloud services enable artifactregistry.googleapis.comm
+      run: gcloud services enable artifactregistry.googleapis.com
 
     - name: Create Artifact Registry Repository
       run: |
