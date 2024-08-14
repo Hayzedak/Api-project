@@ -31,22 +31,30 @@ jobs:
     - name: 'Use gcloud CLI'
       run: gcloud info
 
-    - name: Configure Docker
+    - name: Enable Artifact Registry API
+      run: gcloud services enable artifactregistry.googleapis.com
+
+    - name: Create Artifact Registry Repository
       run: |
-        gcloud auth configure-docker --quiet
+        gcloud artifacts repositories create docker-repo --repository-format=docker \
+        --location=${{ env.GKE_REGION }} --description="Docker repository"
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
 
     - name: Build and Push Docker image
       env:
-        GCR_REGISTRY: gcr.io
+        AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }} .
-        docker push $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }}
+        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
 
     - name: Debug Authentication
       run: |
         gcloud auth list
         gcloud config list
-        gcloud container images list
+        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
@@ -105,9 +113,9 @@ jobs:
 
     - name: Deploy to GKE
       env:
-        GCR_REGISTRY: gcr.io
+        AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        kubectl set image deployment/assignment-deployment assignment=$GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }} -n assignment
+        kubectl set image deployment/assignment-deployment assignment=$AR_REGISTRY/$IMAGE:${{ github.sha }} -n assignment
 
     - name: Wait for deployment
       run: |
