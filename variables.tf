@@ -53,10 +53,6 @@ variable "open_ports" {
   type        = list(string)
 }
 
-variable "api_url" {
-  description = "URL for the API"
-}
-
 variable "container_image" {
   description = "Name of the container image"
 }

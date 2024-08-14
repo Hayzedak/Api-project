@@ -252,9 +252,6 @@ resource "kubernetes_config_map" "api_config" {
     namespace = var.k8s_namespace
   }
 
-  data = {
-    "API_URL" = var.api_url
-  }
 }
 
 # Kubernetes Deployment
