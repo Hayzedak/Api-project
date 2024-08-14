@@ -21,21 +21,28 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Setup gcloud CLI
-      uses: google-github-actions/setup-gcloud@v1
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v1'
       with:
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: Configure Docker
-      run: gcloud auth configure-docker
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
+      with:
+        version: 'latest'
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker us-docker.pkg.dev
 
     - name: Build and Push Docker image
       env:
-        GCR_REGISTRY: gcr.io
+        AR_REGISTRY: us-docker.pkg.dev
+        AR_REPOSITORY: assignment-repository
       run: |
-        docker build -t $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }} .
-        docker push $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }}
+        docker build -t $AR_REGISTRY/$PROJECT_ID/$AR_REPOSITORY/$IMAGE:${{ github.sha }} .
+        docker push $AR_REGISTRY/$PROJECT_ID/$AR_REPOSITORY/$IMAGE:${{ github.sha }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
@@ -95,8 +102,11 @@ jobs:
         gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --region ${{ secrets.GCP_REGION }} --project ${{ secrets.GCP_PROJECT_ID }}
 
     - name: Deploy to GKE
+      env:
+        AR_REGISTRY: us-docker.pkg.dev
+        AR_REPOSITORY: gcr.io
       run: |
-        kubectl set image deployment/assignment-deployment assignment=gcr.io/$PROJECT_ID/$IMAGE:${{ github.sha }} -n assignment
+        kubectl set image deployment/assignment-deployment assignment=$AR_REGISTRY/$PROJECT_ID/$AR_REPOSITORY/$IMAGE:${{ github.sha }} -n assignment
 
     - name: Wait for deployment
       run: |
