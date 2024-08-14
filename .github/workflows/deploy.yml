@@ -16,7 +16,7 @@ jobs:
   setup-build-publish-deploy:
     name: Setup, Build, Publish, and Deploy
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -68,8 +68,6 @@ jobs:
         terraform init \
           -backend-config="bucket=assignment-bucket-tfstate" \
           -backend-config="prefix=terraform/state"
-
-    # ... (rest of your Terraform steps remain the same)
 
     - name: Get GKE Credentials
       run: |
