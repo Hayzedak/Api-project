@@ -101,7 +101,7 @@ jobs:
         TF_VAR_replicas: "2"
 
     - name: Terraform Apply
-      run: terraform apply -auto-approve tfplan
+      run: terraform apply -lock=false -auto-approve tfplan
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
