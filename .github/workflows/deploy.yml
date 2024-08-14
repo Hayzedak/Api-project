@@ -1,20 +1,25 @@
-name: Deploy to GKE
+name: CI/CD Pipeline
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
-  GKE_ZONE: ${{ secrets.GCP_REGION }}
+  GKE_REGION: ${{ secrets.GCP_REGION }}
+  IMAGE: assignment-api
 
 jobs:
-  deploy:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
 
     - name: Setup gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
@@ -27,44 +32,87 @@ jobs:
 
     - name: Build and Push Docker image
       env:
-        IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/example-api
+        GCR_REGISTRY: gcr.io
       run: |
-        docker build -t $IMAGE_NAME:$GITHUB_SHA .
-        docker push $IMAGE_NAME:$GITHUB_SHA
+        docker build -t $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }} .
+        docker push $GCR_REGISTRY/$PROJECT_ID/$IMAGE:${{ github.sha }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
 
     - name: Terraform Init
-      run: terraform init
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+      run: |
+        terraform init \
+          -backend-config="bucket=assignment-bucket-tfstate" \
+          -backend-config="prefix=terraform/state"
 
     - name: Terraform Plan
-      run: |
-        terraform plan \
-          -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-          -var="region=${{ secrets.GCP_REGION }}" \
-          -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
-          -out=tfplan
+      env:
+        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        TF_VAR_region: ${{ secrets.GCP_REGION }}
+        TF_VAR_vpc_name: "assignment-vpc"
+        TF_VAR_subnet_name: "assignment-subnet"
+        TF_VAR_subnet_cidr: "10.0.0.0/24"
+        TF_VAR_cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+        TF_VAR_node_pool_name: "assignment-node-pool"
+        TF_VAR_node_count: "1"
+        TF_VAR_machine_type: "e2-medium"
+        TF_VAR_service_account_id: "assignment-sa"
+        TF_VAR_k8s_namespace: "assignment"
+        TF_VAR_allowed_ips: "102.90.0.0/16"
+        TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
+        TF_VAR_open_ports: '["80", "443", "3000"]'
+        TF_VAR_container_image: "assignment-api"
+        TF_VAR_container_version: ${{ github.sha }}
+        TF_VAR_replicas: "2"
+      run: terraform plan -out=tfplan
 
     - name: Terraform Apply
+      env:
+        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        TF_VAR_region: ${{ secrets.GCP_REGION }}
+        TF_VAR_vpc_name: "assignment-vpc"
+        TF_VAR_subnet_name: "assignment-subnet"
+        TF_VAR_subnet_cidr: "10.0.0.0/24"
+        TF_VAR_cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+        TF_VAR_node_pool_name: "assignment-node-pool"
+        TF_VAR_node_count: "1"
+        TF_VAR_machine_type: "e2-medium"
+        TF_VAR_service_account_id: "assignment-sa"
+        TF_VAR_k8s_namespace: "assignment"
+        TF_VAR_allowed_ips: "102.90.0.0/16"
+        TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
+        TF_VAR_open_ports: '["80", "443", "3000"]'
+        TF_VAR_container_image: "assignment-api"
+        TF_VAR_container_version: ${{ github.sha }}
+        TF_VAR_replicas: "2"
       run: terraform apply -auto-approve tfplan
 
     - name: Get GKE Credentials
       run: |
-        gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
+        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --region ${{ secrets.GCP_REGION }} --project ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Update Kubernetes Deployment
+    - name: Deploy to GKE
       run: |
-        kubectl set image deployment/example-deployment example=gcr.io/$PROJECT_ID/example-api:$GITHUB_SHA
-        kubectl rollout status deployment/example-deployment
+        kubectl set image deployment/assignment-deployment assignment=gcr.io/$PROJECT_ID/$IMAGE:${{ github.sha }} -n assignment
 
-    - name: Test the API
+    - name: Wait for deployment
       run: |
-        ENDPOINT=$(kubectl get service example-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        response=$(curl -s http://$ENDPOINT)
-        if echo $response | grep -q "current_time"; then
-          echo "API test successful"
-        else
-          echo "API test failed"
-          exit 1
-        fi
+        kubectl rollout status deployment/assignment-deployment -n assignment
+
+    - name: Verify API
+      run: |
+        LOAD_BALANCER_IP=$(terraform output -raw load_balancer_ip)
+        for i in {1..30}; do
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://$LOAD_BALANCER_IP:3000)
+          if [ $response -eq 200 ]; then
+            echo "API is accessible"
+            exit 0
+          fi
+          echo "Waiting for API to become accessible... Attempt $i"
+          sleep 10
+        done
+        echo "API did not become accessible within the timeout period"
+        exit 1

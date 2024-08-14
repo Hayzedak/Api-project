@@ -1,52 +1,77 @@
 variable "project_id" {
   description = "The GCP Project ID"
-  type        = string
 }
 
 variable "region" {
   description = "The GCP region to deploy resources"
-  type        = string
-  default     = "us-central1"
-}
-
-variable "zone" {
-  description = "The GCP zone for zonal resources"
-  type        = string
-  default     = "us-central1-a"
-}
-
-variable "cluster_name" {
-  description = "Name of the GKE cluster"
-  type        = string
-  default     = "assignment-gke-cluster"
-}
-
-variable "node_pool_name" {
-  description = "Name of the GKE node pool"
-  type        = string
-  default     = "assignment-node-pool"
 }
 
 variable "vpc_name" {
-  description = "Name of the VPC network"
-  type        = string
-  default     = "assignment-vpc"
+  description = "Name of the VPC"
 }
 
 variable "subnet_name" {
   description = "Name of the subnet"
-  type        = string
-  default     = "assignment-subnet"
 }
 
 variable "subnet_cidr" {
   description = "CIDR range for the subnet"
-  type        = string
-  default     = "10.0.0.0/24"
+}
+
+variable "cluster_name" {
+  description = "Name of the GKE cluster"
+}
+
+variable "node_pool_name" {
+  description = "Name of the GKE node pool"
+}
+
+variable "node_count" {
+  description = "Number of nodes in the GKE node pool"
+  type        = number
+}
+
+variable "machine_type" {
+  description = "Machine type for GKE nodes"
 }
 
 variable "service_account_id" {
   description = "ID for the GKE service account"
+}
+
+variable "k8s_namespace" {
+  description = "Kubernetes namespace for the assignment"
+}
+
+variable "iam_roles_to_grant" {
+  description = "List of IAM roles to grant to the GKE service account"
+  type        = list(string)
+}
+
+variable "open_ports" {
+  description = "List of ports to open in the firewall"
+  type        = list(string)
+}
+
+variable "api_url" {
+  description = "URL for the API"
+}
+
+variable "container_image" {
+  description = "Name of the container image"
+}
+
+variable "container_version" {
+  description = "Version of the container image"
+}
+
+variable "replicas" {
+  description = "Number of replicas for the Kubernetes deployment"
+  type        = number
+}
+
+variable "allowed_ips" {
+  description = "CIDR range allowed to access the GKE cluster"
   type        = string
-  default     = "gke-service-account"
+  default     = "102.90.0.0/16"  # This covers a range of IPs; adjust as needed
 }

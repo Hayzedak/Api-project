@@ -5,11 +5,48 @@ provider "google" {
 
 data "google_client_config" "default" {}
 
+terraform {
+  backend "gcs" {
+    bucket  = "assignment-bucket-tfstate"
+    prefix  = "terraform/state"
+  }
+}
 
 provider "kubernetes" {
-  host                   = "https://${google_container_cluster.primary.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+  host  = "https://${google_container_cluster.primary.endpoint}"
+  token = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(
+    google_container_cluster.primary.master_auth[0].cluster_ca_certificate,
+  )
+}
+
+# Policy as Code
+locals {
+  allowed_iam_roles = [
+    "roles/container.developer",
+    "roles/storage.objectViewer"
+  ]
+  allowed_open_ports = ["80", "443", "3000"]
+}
+
+resource "terraform_data" "iam_policy_check" {
+  count = length(var.iam_roles_to_grant)
+
+  lifecycle {
+    precondition {
+      condition     = contains(local.allowed_iam_roles, var.iam_roles_to_grant[count.index])
+      error_message = "IAM role ${var.iam_roles_to_grant[count.index]} is not allowed. Allowed roles are: ${join(", ", local.allowed_iam_roles)}"
+    }
+  }
+}
+
+resource "terraform_data" "firewall_policy_check" {
+  lifecycle {
+    precondition {
+      condition     = alltrue([for port in var.open_ports : contains(local.allowed_open_ports, port)])
+      error_message = "One or more specified ports are not allowed to be opened. Allowed ports are: ${join(", ", local.allowed_open_ports)}"
+    }
+  }
 }
 
 # VPC and Networking
@@ -23,17 +60,18 @@ resource "google_compute_subnetwork" "subnet" {
   ip_cidr_range = var.subnet_cidr
   region        = var.region
   network       = google_compute_network.vpc.self_link
+  private_ip_google_access = true
 }
 
 # NAT Gateway
 resource "google_compute_router" "router" {
-  name    = "assignment-router"
-  region  = google_compute_subnetwork.subnet.region
+  name    = "my-router"
+  region  = var.region
   network = google_compute_network.vpc.self_link
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "assignment-router-nat"
+  name                               = "my-router-nat"
   router                             = google_compute_router.router.name
   region                             = google_compute_router.router.region
   nat_ip_allocate_option             = "AUTO_ONLY"
@@ -62,30 +100,17 @@ resource "google_compute_firewall" "allow_internal" {
   source_ranges = [var.subnet_cidr]
 }
 
-#resource "google_compute_firewall" "deny_external_ip_access" {
-#  name    = "deny-external-ip-access"
-#  network = google_compute_network.vpc.name
-#
-#  deny {
-#    protocol = "all"
-#  }
-#
-#  source_ranges = ["0.0.0.0/0"]
-#
-#  target_tags = ["no-external-ip"]
-#}
-
-resource "google_compute_firewall" "allow_wsl_and_localhost" {
-  name    = "allow-wsl-and-localhost"
+resource "google_compute_firewall" "allow_kubectl_access" {
+  name    = "allow-kubectl-access"
   network = google_compute_network.vpc.name
-
+  
   allow {
     protocol = "tcp"
-    ports    = ["443"] 
+    ports    = ["443"]
   }
 
-  source_ranges = ["172.30.226.117/32", "127.0.0.1/32"]
-  target_tags   = ["no-external-ip"]
+  source_ranges = [var.allowed_ips]
+  target_tags   = ["gke-${var.cluster_name}"]
 }
 
 # GKE Cluster
@@ -110,6 +135,23 @@ resource "google_container_cluster" "primary" {
     services_ipv4_cidr_block = "/22"
   }
 
+  master_authorized_networks_config {
+    cidr_blocks {
+      cidr_block   = var.allowed_ips
+      display_name = "Allowed IP Range"
+    }
+  }
+
+  network_policy {
+    enabled = true
+  }
+
+  addons_config {
+    network_policy_config {
+      disabled = false
+    }
+  }
+
   deletion_protection = false 
 }
 
@@ -117,68 +159,114 @@ resource "google_container_node_pool" "primary_nodes" {
   name       = var.node_pool_name
   location   = var.region
   cluster    = google_container_cluster.primary.name
-  node_count = 1
+  
+  initial_node_count = var.node_count
+
+  autoscaling {
+    min_node_count = var.node_count
+    max_node_count = 3  
+  }
 
   node_config {
     preemptible  = true
-    machine_type = "e2-micro"
+    machine_type = var.machine_type
 
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
 
-    tags = ["no-external-ip"]
+    tags = ["gke-node"]
   }
 }
 
 # Create a delay
 resource "time_sleep" "wait_for_kubernetes" {
-  depends_on = [google_container_node_pool.primary_nodes]
-  create_duration = "30s"
+  depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
+  create_duration = "300s"
+}
+
+# Ensure cluster is accessible
+resource "null_resource" "kubectl_setup" {
+  depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes, time_sleep.wait_for_kubernetes]
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command = join("\n", [
+      "echo 'Setting up kubectl...'",
+      "gcloud config set project '${var.project_id}'",
+      "gcloud container clusters get-credentials '${google_container_cluster.primary.name}' --region '${var.region}' --project '${var.project_id}'",
+      "echo 'Waiting for nodes to be ready...'",
+      "for i in $(seq 1 10); do",
+      "  if kubectl wait --for=condition=Ready nodes --all --timeout=60s; then",
+      "    echo 'Nodes are ready'",
+      "    break",
+      "  fi",
+      "  echo \"Waiting for nodes... Attempt $i\"",
+      "  sleep 30",
+      "done",
+      "echo 'Fetching nodes...'",
+      "kubectl get nodes"
+    ])
+  }
+
+  triggers = {
+    cluster_ep = google_container_cluster.primary.endpoint
+  }
 }
 
 # IAM Roles and Policies
-resource "google_project_iam_member" "gke_sa_role" {
-  project = var.project_id
-  role    = "roles/container.developer"
-  member  = "serviceAccount:${google_service_account.gke_sa.email}"
-}
-
 resource "google_service_account" "gke_sa" {
   account_id   = var.service_account_id
   display_name = "GKE Service Account"
 }
 
+resource "google_project_iam_member" "gke_sa_roles" {
+  count   = length(var.iam_roles_to_grant)
+  project = var.project_id
+  role    = var.iam_roles_to_grant[count.index]
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+
+  depends_on = [terraform_data.iam_policy_check]
+}
+
 # Kubernetes Namespace
 resource "kubernetes_namespace" "assignment" {
-  depends_on = [time_sleep.wait_for_kubernetes]
+  depends_on = [null_resource.kubectl_setup]
   metadata {
-    name = "assignment"
+    name = var.k8s_namespace
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].labels,
+      metadata[0].annotations,
+    ]
+  }
+}
+
+# Kubernetes ConfigMap
+resource "kubernetes_config_map" "api_config" {
+  depends_on = [null_resource.kubectl_setup, kubernetes_namespace.assignment]
+  metadata {
+    name      = "api-config"
+    namespace = var.k8s_namespace
+  }
+
+  data = {
+    "API_URL" = var.api_url
   }
 }
 
 # Kubernetes Deployment
-resource "google_compute_firewall" "allow_kubernetes_api" {
-  name    = "allow-kubernetes-api"
-  network = google_compute_network.vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["443"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]  # Change to your IP range for security
-}
-
-
 resource "kubernetes_deployment" "assignment" {
+  depends_on = [null_resource.kubectl_setup, kubernetes_config_map.api_config]
   metadata {
     name      = "assignment-deployment"
-    namespace = kubernetes_namespace.assignment.metadata[0].name
+    namespace = var.k8s_namespace
   }
 
   spec {
-    replicas = 1
+    replicas = var.replicas
 
     selector {
       match_labels = {
@@ -195,11 +283,22 @@ resource "kubernetes_deployment" "assignment" {
 
       spec {
         container {
-          image = "gcr.io/${var.project_id}/assignment-api:latest"
+          image = "gcr.io/${var.project_id}/${var.container_image}:${var.container_version}"
           name  = "assignment"
 
           port {
             container_port = 3000
+          }
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.api_config.metadata[0].name
+            }
+          }
+
+          env {
+            name  = "PORT"
+            value = "3000"
           }
         }
       }
@@ -209,14 +308,15 @@ resource "kubernetes_deployment" "assignment" {
 
 # Kubernetes Service
 resource "kubernetes_service" "assignment" {
+  depends_on = [null_resource.kubectl_setup, kubernetes_deployment.assignment]
   metadata {
     name      = "assignment-service"
-    namespace = kubernetes_namespace.assignment.metadata[0].name
+    namespace = var.k8s_namespace
   }
 
   spec {
     selector = {
-      app = kubernetes_deployment.assignment.spec[0].template[0].metadata[0].labels.app
+      app = "assignment"
     }
 
     port {
@@ -229,13 +329,14 @@ resource "kubernetes_service" "assignment" {
 }
 
 # Kubernetes Ingress
-# Kubernetes Ingress
 resource "kubernetes_ingress_v1" "assignment" {
+  depends_on = [null_resource.kubectl_setup, kubernetes_service.assignment]
   metadata {
     name      = "assignment-ingress"
-    namespace = kubernetes_namespace.assignment.metadata[0].name
+    namespace = var.k8s_namespace
     annotations = {
-      "kubernetes.io/ingress.class" = "gce"  
+      "kubernetes.io/ingress.class"                 = "gce"
+      "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.ingress_ip.name
     }
   }
 
@@ -243,8 +344,8 @@ resource "kubernetes_ingress_v1" "assignment" {
     rule {
       http {
         path {
-          path = "/"  
-          path_type = "Prefix"  
+          path = "/"
+          path_type = "Prefix"
           backend {
             service {
               name = kubernetes_service.assignment.metadata[0].name
@@ -257,4 +358,12 @@ resource "kubernetes_ingress_v1" "assignment" {
       }
     }
   }
+}
+
+resource "google_compute_global_address" "ingress_ip" {
+  name = "assignment-ingress-ip"
+}
+
+output "load_balancer_ip" {
+  value = google_compute_global_address.ingress_ip.address
 }
