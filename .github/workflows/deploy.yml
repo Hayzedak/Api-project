@@ -35,7 +35,7 @@ jobs:
     - name: Build and Push Docker image
       env:
         AR_REGISTRY: us-docker.pkg.dev
-        AR_REPOSITORY: assignment-repository
+        AR_REPOSITORY: gcr.io
       run: |
         docker build -t $AR_REGISTRY/$PROJECT_ID/$AR_REPOSITORY/$IMAGE:${{ github.sha }} .
         docker push $AR_REGISTRY/$PROJECT_ID/$AR_REPOSITORY/$IMAGE:${{ github.sha }}
