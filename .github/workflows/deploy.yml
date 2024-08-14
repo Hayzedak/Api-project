@@ -35,8 +35,14 @@ jobs:
     - name: 'Use gcloud CLI'
       run: gcloud info
 
-    - name: Enable Artifact Registry API
-      run: gcloud services enable artifactregistry.googleapis.com
+    - name: Check and Enable Artifact Registry API
+      run: |
+        if gcloud services list --enabled | grep -q 'artifactregistry.googleapis.com'; then
+          echo "Artifact Registry API is already enabled"
+        else
+          echo "Enabling Artifact Registry API..."
+          gcloud services enable artifactregistry.googleapis.com
+        fi
 
     - name: Create Artifact Registry Repository
       run: |
