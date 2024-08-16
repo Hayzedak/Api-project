@@ -59,18 +59,6 @@ jobs:
           fi
         done
 
-    - name: Grant permissions to service account
-      run: |
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
-          --role=roles/compute.networkAdmin
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
-          --role=roles/container.admin
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
-          --role=roles/iam.admin
-
     - name: Create Artifact Registry Repository
       run: |
         gcloud artifacts repositories create docker-repo --repository-format=docker \
