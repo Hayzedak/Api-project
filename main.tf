@@ -109,8 +109,8 @@ resource "google_compute_firewall" "allow_kubectl_access" {
     ports    = ["443"]
   }
 
-  source_ranges = [var.allowed_ips]
-  target_tags   = ["gke-${var.cluster_name}"]
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["gke-node"]
 }
 
 # GKE Cluster
@@ -135,12 +135,12 @@ resource "google_container_cluster" "primary" {
     services_ipv4_cidr_block = "/22"
   }
 
-  master_authorized_networks_config {
-    cidr_blocks {
-      cidr_block   = var.allowed_ips
-      display_name = "Allowed IP Range"
-    }
-  }
+#  master_authorized_networks_config {
+#    cidr_blocks {
+#      cidr_block   = var.allowed_ips
+#      display_name = "Allowed IP Range"
+#    }
+#  }
 
   network_policy {
     enabled = true
