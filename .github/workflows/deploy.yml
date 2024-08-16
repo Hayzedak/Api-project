@@ -85,15 +85,12 @@ jobs:
       uses: hashicorp/setup-terraform@v2
 
     - name: Terraform Init
-      run: |
-        terraform init \
-          -backend-config="bucket=assignment-bucket-tfstate" \
-          -backend-config="prefix=terraform/state"
+      run: terraform init 
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
        
     - name: Terraform Plan   
-      run: terraform plan 
+      run: terraform plan -lock=false
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
@@ -114,7 +111,7 @@ jobs:
         TF_VAR_replicas: "2"
 
     - name: Terraform Apply
-      run: terraform apply 
+      run: terraform apply -lock-false
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
