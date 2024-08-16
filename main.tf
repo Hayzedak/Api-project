@@ -113,6 +113,19 @@ resource "google_compute_firewall" "allow_kubectl_access" {
   target_tags   = ["gke-node"]
 }
 
+resource "google_compute_firewall" "allow_github_actions" {
+  name    = "allow-github-actions"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443", "8443", "10250"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["gke-node"]
+}
+
 # GKE Cluster
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
@@ -125,7 +138,7 @@ resource "google_container_cluster" "primary" {
   subnetwork = google_compute_subnetwork.subnet.self_link
 
   private_cluster_config {
-    enable_private_nodes    = true
+    enable_private_nodes    = false
     enable_private_endpoint = false
     master_ipv4_cidr_block  = "172.16.0.0/28"
   }
