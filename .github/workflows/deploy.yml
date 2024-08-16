@@ -91,7 +91,6 @@ jobs:
       run: |
         gcloud auth list
         gcloud config list
-        gcloud config get-value account
         gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
 
     - name: Setup Terraform
