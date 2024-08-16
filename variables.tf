@@ -65,9 +65,3 @@ variable "replicas" {
   description = "Number of replicas for the Kubernetes deployment"
   type        = number
 }
-
-#variable "allowed_ips" {
-#  description = "CIDR range allowed to access the GKE cluster"
-#  type        = string
-#  default     = "102.90.0.0/16"  # This covers a range of IPs; adjust as needed
-#}
