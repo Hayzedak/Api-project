@@ -20,12 +20,18 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
         version: 'latest'
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Install kubectl
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y kubectl
 
     - name: 'Decode and authenticate with GCP'
       run: |
@@ -36,14 +42,24 @@ jobs:
     - name: 'Use gcloud CLI'
       run: gcloud info
 
-    - name: Check and Enable Artifact Registry API
+    - name: Enable necessary APIs
       run: |
-        if gcloud services list --enabled | grep -q 'artifactregistry.googleapis.com'; then
-          echo "Artifact Registry API is already enabled"
-        else
-          echo "Enabling Artifact Registry API..."
-          gcloud services enable artifactregistry.googleapis.com
-        fi
+        gcloud services enable compute.googleapis.com
+        gcloud services enable container.googleapis.com
+        gcloud services enable cloudresourcemanager.googleapis.com
+        gcloud services enable artifactregistry.googleapis.com
+
+    - name: Grant permissions to service account
+      run: |
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
+          --role=roles/compute.networkAdmin
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
+          --role=roles/container.admin
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
+          --role=roles/iam.admin
 
     - name: Create Artifact Registry Repository
       run: |
@@ -68,7 +84,7 @@ jobs:
         gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
+      uses: hashicorp/setup-terraform@v2
 
     - name: Terraform Init
       run: |
@@ -79,7 +95,7 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
        
     - name: Terraform Plan   
-      run: terraform plan -lock=false -out=tfplan
+      run: terraform plan -out=tfplan
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
@@ -101,7 +117,19 @@ jobs:
         TF_VAR_replicas: "2"
 
     - name: Terraform Apply
-      run: terraform apply -lock=false -auto-approve tfplan
+      run: |
+        for i in {1..3}; do
+          if terraform apply -auto-approve tfplan; then
+            echo "Terraform apply succeeded"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "Terraform apply failed after 3 attempts"
+            exit 1
+          fi
+          echo "Terraform apply failed. Retrying in 30 seconds..."
+          sleep 30
+        done
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
@@ -121,6 +149,11 @@ jobs:
         TF_VAR_container_image: "assignment-api"
         TF_VAR_container_version: ${{ github.sha }}
         TF_VAR_replicas: "2"
+
+    - name: Verify GKE Cluster Access
+      run: |
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --region ${{ env.GKE_REGION }}
+        kubectl get nodes
 
     - name: Verify API
       run: |

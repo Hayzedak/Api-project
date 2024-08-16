@@ -193,6 +193,7 @@ resource "null_resource" "kubectl_setup" {
     interpreter = ["/bin/bash", "-c"]
     command = join("\n", [
       "echo 'Setting up kubectl...'",
+      "gcloud components install gke-gcloud-auth-plugin -q",
       "gcloud config set project '${var.project_id}'",
       "gcloud container clusters get-credentials '${google_container_cluster.primary.name}' --region '${var.region}' --project '${var.project_id}'",
       "echo 'Waiting for nodes to be ready...'",
