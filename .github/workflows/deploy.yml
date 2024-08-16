@@ -44,10 +44,20 @@ jobs:
 
     - name: Enable necessary APIs
       run: |
-        gcloud services enable compute.googleapis.com
-        gcloud services enable container.googleapis.com
-        gcloud services enable cloudresourcemanager.googleapis.com
-        gcloud services enable artifactregistry.googleapis.com
+        apis_to_enable=(
+           "compute.googleapis.com"
+           "container.googleapis.com"
+           "cloudresourcemanager.googleapis.com"
+           "artifactregistry.googleapis.com"
+        )
+        for api in "${apis_to_enable[@]}"; do
+          if gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "$api"; then
+             echo "$api is already enabled"
+        else
+           echo "Enabling $api..."
+           gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
+        fi
+     done
 
     - name: Grant permissions to service account
       run: |
