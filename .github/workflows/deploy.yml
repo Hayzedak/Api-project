@@ -92,6 +92,27 @@ jobs:
       env:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
        
+    - name: Terraform Plan   
+      run: terraform plan -lock=false -out=tfplan
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        TF_VAR_region: ${{ secrets.GCP_REGION }}
+        TF_VAR_vpc_name: "assignment-vpc"
+        TF_VAR_subnet_name: "assignment-subnet"
+        TF_VAR_subnet_cidr: "10.0.0.0/24"
+        TF_VAR_cluster_name: "assignment-cluster"
+        TF_VAR_node_pool_name: "assignment-node-pool"
+        TF_VAR_node_count: "1"
+        TF_VAR_machine_type: "e2-medium"
+        TF_VAR_service_account_id: "assignment-sa"
+        TF_VAR_k8s_namespace: "assignment"
+        TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
+        TF_VAR_open_ports: '["80", "443", "3000"]'
+        TF_VAR_container_image: "assignment-api"
+        TF_VAR_container_version: ${{ github.sha }}
+        TF_VAR_replicas: "2"
+
     - name: Terraform Apply
       run: terraform apply -lock=false -auto-approve
       env:
