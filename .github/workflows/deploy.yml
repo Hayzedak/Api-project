@@ -11,7 +11,6 @@ env:
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GCP_REGION }}
   IMAGE: assignment-api
-  GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_key.json
 
 jobs:
   setup-build-publish-deploy:
@@ -33,11 +32,20 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kubectl
 
-    - name: 'Decode and authenticate with GCP'
+    - name: 'Authenticate with GCP and set project'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY_B64 }}'
+
+    - name: 'Set GCP project'
       run: |
-        echo "${{ secrets.GCP_SA_KEY_B64 }}" | base64 --decode > /tmp/gcp_key.json
-        gcloud auth activate-service-account --key-file=/tmp/gcp_key.json
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: 'Set up GKE credentials'
+      uses: google-github-actions/get-gke-credentials@v1
+      with:
+        cluster_name: '${{ env.GKE_CLUSTER }}'
+        location: '${{ env.GKE_REGION }}'
 
     - name: 'Use gcloud CLI'
       run: gcloud info
@@ -85,14 +93,11 @@ jobs:
       uses: hashicorp/setup-terraform@v2
 
     - name: Terraform Init
-      run: terraform init 
-      env:
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-       
-    - name: Terraform Plan   
+      run: terraform init
+
+    - name: Terraform Plan
       run: terraform plan -out=tfplan
       env:
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
         TF_VAR_vpc_name: "assignment-vpc"
@@ -113,7 +118,6 @@ jobs:
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
       env:
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
         TF_VAR_vpc_name: "assignment-vpc"
