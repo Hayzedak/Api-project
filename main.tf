@@ -294,7 +294,7 @@ resource "kubernetes_deployment" "assignment" {
 
       spec {
         container {
-          image = "docker-repo/${var.project_id}/${var.container_image}:${var.container_version}"
+          image = "${var.region}-docker.pkg.dev/${var.project_id}/docker-repo/${var.container_image}:${var.container_version}""
           name  = "assignment"
 
           port {
