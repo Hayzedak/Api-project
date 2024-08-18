@@ -35,6 +35,17 @@ jobs:
       run: |
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
 
+    - name: 'Verify Artifact Registry Repository'
+      run: |
+        if gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}; then
+          echo "Repository docker-repo exists"
+          gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}
+        else
+          echo "Repository docker-repo does not exist"
+          echo "Available repositories:"
+          gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+        fi
+
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
@@ -58,8 +69,11 @@ jobs:
         gcloud config list
         gcloud auth list
         docker images
-        echo "Artifact Registry repositories:"
-        gcloud artifacts repositories list --location=${{ env.GKE_REGION }} || echo "Failed to list repositories"
+        echo "Service account permissions:"
+        gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+          --flatten="bindings[].members" \
+          --format='table(bindings.role)' \
+          --filter="bindings.members:$(gcloud config get-value account)"
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
