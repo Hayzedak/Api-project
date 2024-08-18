@@ -25,6 +25,15 @@ jobs:
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
         version: 'latest'
+<<<<<<< HEAD
+=======
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Install kubectl
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y kubectl
+>>>>>>> e32e9ea7e5bdefd66e04421c1cf9571db1cebfb1
 
     - name: 'Authenticate with GCP'
       uses: 'google-github-actions/auth@v1'
@@ -35,6 +44,41 @@ jobs:
       run: |
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
 
+<<<<<<< HEAD
+=======
+    - name: 'Use gcloud CLI'
+      run: gcloud info
+
+    - name: Enable necessary APIs
+      run: |
+        apis_to_enable=(
+          "compute.googleapis.com"
+          "container.googleapis.com"
+          "cloudresourcemanager.googleapis.com"
+          "artifactregistry.googleapis.com"
+        )
+        for api in "${apis_to_enable[@]}"; do
+          if gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "$api"; then
+            echo "$api is already enabled"
+          else
+            echo "Enabling $api..."
+            gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
+          fi
+        done
+
+    - name: 'Verify or Create Artifact Registry Repository'
+      run: |
+        if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}; then
+          echo "Creating Artifact Registry repository..."
+          gcloud artifacts repositories create docker-repo \
+            --repository-format=docker \
+            --location=${{ env.GKE_REGION }} \
+            --description="Docker repository"
+        else
+          echo "Repository docker-repo already exists."
+        fi
+
+>>>>>>> e32e9ea7e5bdefd66e04421c1cf9571db1cebfb1
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
@@ -44,6 +88,7 @@ jobs:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
         docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+<<<<<<< HEAD
 
     - name: Push Docker image
       env:
@@ -60,6 +105,21 @@ jobs:
         docker images
         echo "Artifact Registry repositories:"
         gcloud artifacts repositories list --location=${{ env.GKE_REGION }} || echo "Failed to list repositories"
+=======
+        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
+      
+    - name: Debug Authentication and Permissions
+      if: failure()
+      run: |
+        echo "Debug information:"
+        gcloud auth list
+        gcloud config list
+        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+        gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+          --flatten="bindings[].members" \
+          --format='table(bindings.role)' \
+          --filter="bindings.members:$(gcloud config get-value account)"
+>>>>>>> e32e9ea7e5bdefd66e04421c1cf9571db1cebfb1
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
