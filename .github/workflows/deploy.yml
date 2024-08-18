@@ -59,6 +59,15 @@ jobs:
           fi
         done
 
+    - name: 'Verify Artifact Registry Permissions'
+      run: |
+        if gcloud artifacts repositories get-iam-policy docker-repo --location=${{ env.GKE_REGION }} | grep -q "roles/artifactregistry.writer"; then
+          echo "Service account has Artifact Registry Writer role"
+        else
+          echo "Service account is missing Artifact Registry Writer role. Please add it manually."
+          exit 1
+        fi
+
     - name: 'Verify or Create Artifact Registry Repository'
       run: |
         if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
