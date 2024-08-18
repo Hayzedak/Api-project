@@ -60,17 +60,23 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
 
+    - name: Prepare GCP Credentials
+      run: |
+        echo '${{ secrets.GCP_SA_KEY_B64 }}' | base64 -d > /tmp/gcp_credentials.json
+
     - name: Terraform Init
       run: |
         terraform init -migrate-state -force-copy \
           -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-          -backend-config="prefix=terraform/state"
+          -backend-config="prefix=terraform/state" \
+          -backend-config="credentials=/tmp/gcp_credentials.json"
       env:
-        GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY_B64 }}
+        GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
 
     - name: Terraform Plan
       run: terraform plan -out=tfplan
       env:
+        GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
         TF_VAR_vpc_name: "assignment-vpc"
@@ -91,6 +97,7 @@ jobs:
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
       env:
+        GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
         TF_VAR_vpc_name: "assignment-vpc"
