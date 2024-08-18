@@ -57,10 +57,6 @@ variable "container_image" {
   description = "Name of the container image"
 }
 
-variable "container_version" {
-  description = "Version of the container image"
-}
-
 variable "replicas" {
   description = "Number of replicas for the Kubernetes deployment"
   type        = number
