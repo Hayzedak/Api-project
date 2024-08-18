@@ -36,21 +36,29 @@ jobs:
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
 
-    - name: Build Docker image
+    - name: Debug Environment Variables
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+        echo "PROJECT_ID: ${{ env.PROJECT_ID }}"
+        echo "GKE_REGION: ${{ env.GKE_REGION }}"
+        echo "IMAGE: ${{ env.IMAGE }}"
+        echo "AR_REGISTRY: $AR_REGISTRY"
+        echo "GITHUB_SHA: ${{ github.sha }}"
 
-    - name: Push Docker image
+    - name: Build and Push Docker image
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
+        echo "Building Docker image with tag: $AR_REGISTRY/$IMAGE:${{ github.sha }}"
+        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+        echo "Pushing Docker image with tag: $AR_REGISTRY/$IMAGE:${{ github.sha }}"
         docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
 
     - name: Debug Information
-      if: failure()
+      if: always()
       run: |
+        echo "Debugging information:"
         gcloud info
         gcloud auth list
         gcloud config list
