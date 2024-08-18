@@ -66,10 +66,22 @@ jobs:
           fi
         done
 
-    - name: Create Artifact Registry Repository
+    - name: 'Grant Artifact Registry permissions'
       run: |
-        gcloud artifacts repositories create docker-repo --repository-format=docker \
-        --location=${{ env.GKE_REGION }} --description="Docker repository"
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
+          --role=roles/artifactregistry.admin
+
+    - name: 'Verify or Create Artifact Registry Repository'
+      run: |
+        if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}; then
+          gcloud artifacts repositories create docker-repo \
+            --repository-format=docker \
+            --location=${{ env.GKE_REGION }} \
+            --description="Docker repository"
+        else
+          echo "Repository docker-repo already exists."
+        fi
 
     - name: Configure Docker for Artifact Registry
       run: |
