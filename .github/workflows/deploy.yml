@@ -45,8 +45,8 @@ jobs:
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
-        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
+        docker build -t $AR_REGISTRY/$IMAGE:latest .
+        docker push $AR_REGISTRY/$IMAGE:latest
 
     - name: Debug Information
       if: always()
@@ -92,7 +92,6 @@ jobs:
         TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
         TF_VAR_open_ports: '["80", "443", "3000"]'
         TF_VAR_container_image: "assignment-api"
-        TF_VAR_container_version: ${{ github.sha }}
         TF_VAR_replicas: "2"
 
     - name: Terraform Apply
@@ -113,19 +112,15 @@ jobs:
         TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
         TF_VAR_open_ports: '["80", "443", "3000"]'
         TF_VAR_container_image: "assignment-api"
-        TF_VAR_container_version: ${{ github.sha }}
         TF_VAR_replicas: "2"
-
-    - name: Verify GKE Cluster Access
-      run: |
-        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_REGION }}
-        kubectl get nodes
-
+    
     - name: Verify API
       run: |
         LOAD_BALANCER_IP=$(kubectl get service assignment-service -n assignment -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        for i in {1..30}; do
-          response=$(curl -s -o /dev/null -w "%{http_code}" http://$LOAD_BALANCER_IP:3000)
+        echo "Load Balancer IP: $LOAD_BALANCER_IP"
+          
+        for i in {1..60}; do
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://$LOAD_BALANCER_IP)
           if [ $response -eq 200 ]; then
             echo "API is accessible"
             exit 0
@@ -133,5 +128,7 @@ jobs:
           echo "Waiting for API to become accessible... Attempt $i"
           sleep 10
         done
+          
         echo "API did not become accessible within the timeout period"
-        exit 1
+        kubectl get services,pods -n assignment
+        exit 1    

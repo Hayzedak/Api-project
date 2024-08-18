@@ -195,7 +195,7 @@ resource "google_container_node_pool" "primary_nodes" {
 # Create a delay
 resource "time_sleep" "wait_for_kubernetes" {
   depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
-  create_duration = "300s"
+  create_duration = "30s"
 }
 
 # Ensure cluster is accessible
@@ -294,7 +294,7 @@ resource "kubernetes_deployment" "assignment" {
 
       spec {
         container {
-          image = "${var.region}-docker.pkg.dev/${var.project_id}/docker-repo/${var.container_image}:${var.container_version}"
+          image = "${var.region}-docker.pkg.dev/${var.project_id}/docker-repo/${var.container_image}:latest"
           name  = "assignment"
 
           port {
