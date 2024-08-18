@@ -8,7 +8,6 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GCP_REGION }}
   IMAGE: assignment-api
 
@@ -37,13 +36,12 @@ jobs:
 
     - name: 'Verify Artifact Registry Repository'
       run: |
-        if gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}; then
+        if gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
           echo "Repository docker-repo exists"
-          gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}
         else
-          echo "Repository docker-repo does not exist"
-          echo "Available repositories:"
+          echo "Repository docker-repo does not exist. Available repositories:"
           gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+          exit 1
         fi
 
     - name: Configure Docker for Artifact Registry
@@ -69,11 +67,10 @@ jobs:
         gcloud config list
         gcloud auth list
         docker images
-        echo "Service account permissions:"
-        gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
-          --flatten="bindings[].members" \
-          --format='table(bindings.role)' \
-          --filter="bindings.members:$(gcloud config get-value account)"
+        echo "Artifact Registry repositories:"
+        gcloud artifacts repositories list --location=${{ env.GKE_REGION }} || echo "Failed to list repositories"
+        echo "Current permissions:"
+        gcloud artifacts repositories get-iam-policy docker-repo --location=${{ env.GKE_REGION }} || echo "Failed to get repository IAM policy"
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
