@@ -45,8 +45,8 @@ jobs:
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:latest .
-        docker push $AR_REGISTRY/$IMAGE:latest
+        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
 
     - name: Debug Information
       if: always()
@@ -61,7 +61,12 @@ jobs:
       uses: hashicorp/setup-terraform@v2
 
     - name: Terraform Init
-      run: terraform init
+      run: |
+        terraform init -migrate-state -force-copy \
+          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+          -backend-config="prefix=terraform/state"
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY_B64 }}
 
     - name: Terraform Plan
       run: terraform plan -out=tfplan

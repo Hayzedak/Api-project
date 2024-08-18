@@ -5,12 +5,12 @@ provider "google" {
 
 data "google_client_config" "default" {}
 
-#terraform {
-#  backend "gcs" {
- #   bucket  = "assignment-bucket-tfstate"
-  #  prefix  = "terraform/state"
-#  }
-#}
+terraform {
+  backend "gcs" {
+    bucket  = "my-assignment-bucket-tfstate"
+    prefix  = "terraform/state"
+  }
+}
 
 provider "kubernetes" {
   host  = "https://${google_container_cluster.primary.endpoint}"
