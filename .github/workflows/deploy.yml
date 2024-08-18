@@ -40,8 +40,8 @@ jobs:
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:latest .
-        docker push $AR_REGISTRY/$IMAGE:latest
+        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
+        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
 
     - name: Debug Information
       if: always()
