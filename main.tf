@@ -100,13 +100,13 @@ resource "google_compute_firewall" "allow_internal" {
   source_ranges = [var.subnet_cidr]
 }
 
-resource "google_compute_firewall" "allow_kubectl_access" {
-  name    = "allow-kubectl-access"
+resource "google_compute_firewall" "allow_kubectl_access_and_ingress" {
+  name    = "allow-kubectl-and-ingress-access"
   network = google_compute_network.vpc.name
   
   allow {
     protocol = "tcp"
-    ports    = ["443"]
+    ports    = ["443", "80"]
   }
 
   source_ranges = ["0.0.0.0/0"]

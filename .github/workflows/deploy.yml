@@ -118,7 +118,7 @@ jobs:
 
     - name: Verify GKE Cluster Access
       run: |
-        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --region ${{ env.GKE_REGION }}
+        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_REGION }}
         kubectl get nodes
 
     - name: Verify API
