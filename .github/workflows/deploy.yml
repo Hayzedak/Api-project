@@ -32,10 +32,14 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kubectl
 
+    - name: 'Decode GCP credentials'
+      run: |
+        echo "${{ secrets.GCP_SA_KEY_B64 }}" | base64 --decode > /tmp/gcp_key.json
+
     - name: 'Authenticate with GCP and set project'
       uses: 'google-github-actions/auth@v1'
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY_B64 }}'
+        credentials_json: '${{ cat /tmp/gcp_key.json }}'
 
     - name: 'Set GCP project'
       run: |
