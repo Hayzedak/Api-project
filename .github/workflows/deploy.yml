@@ -32,6 +32,11 @@ jobs:
     - name: 'Set GCP project'
       run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
 
+    - name: Create Artifact Registry Repository
+      run: |
+        gcloud artifacts repositories create docker-repo --repository-format=docker \
+        --location=${{ env.GKE_REGION }} --description="Docker repository"
+
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
@@ -40,8 +45,8 @@ jobs:
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
-        docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
+        docker build -t $AR_REGISTRY/$IMAGE:latest .
+        docker push $AR_REGISTRY/$IMAGE:latest
 
     - name: Debug Information
       if: always()
