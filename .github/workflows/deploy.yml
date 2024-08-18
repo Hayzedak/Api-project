@@ -32,11 +32,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kubectl
 
-    - name: 'Decode and setup GCP credentials'
-      run: |
-        echo '${{ secrets.GCP_SA_KEY_B64 }}' | base64 --decode > /tmp/gcp_key.json
-        echo "GCP key decoded successfully"
-
     - name: 'Authenticate with GCP'
       uses: 'google-github-actions/auth@v1'
       with:
@@ -66,15 +61,10 @@ jobs:
           fi
         done
 
-    - name: 'Grant Artifact Registry permissions'
-      run: |
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
-          --role=roles/artifactregistry.admin
-
     - name: 'Verify or Create Artifact Registry Repository'
       run: |
         if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }}; then
+          echo "Creating Artifact Registry repository..."
           gcloud artifacts repositories create docker-repo \
             --repository-format=docker \
             --location=${{ env.GKE_REGION }} \
@@ -93,12 +83,18 @@ jobs:
       run: |
         docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
         docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
-
-    - name: Debug Authentication
+      
+    - name: Debug Authentication and Permissions
+      if: failure()
       run: |
+        echo "Debug information:"
         gcloud auth list
         gcloud config list
         gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+        gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+          --flatten="bindings[].members" \
+          --format='table(bindings.role)' \
+          --filter="bindings.members:$(gcloud config get-value account)"
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
