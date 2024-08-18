@@ -1,19 +1,18 @@
 name: CI/CD Pipeline
-
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GCP_REGION }}
   IMAGE: assignment-api
 
 jobs:
-  build-and-push:
-    name: Build and Push Docker Image
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
     runs-on: ubuntu-latest
     
     steps:
@@ -24,6 +23,12 @@ jobs:
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
         version: 'latest'
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Install kubectl
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y kubectl
 
     - name: 'Authenticate with GCP'
       uses: 'google-github-actions/auth@v1'
@@ -34,43 +39,54 @@ jobs:
       run: |
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: 'Verify Artifact Registry Repository'
+    - name: 'Use gcloud CLI'
+      run: gcloud info
+
+    - name: Enable necessary APIs
       run: |
-        if gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
-          echo "Repository docker-repo exists"
+        apis_to_enable=(
+          "compute.googleapis.com"
+          "container.googleapis.com"
+          "cloudresourcemanager.googleapis.com"
+          "artifactregistry.googleapis.com"
+        )
+        for api in "${apis_to_enable[@]}"; do
+          if gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "$api"; then
+            echo "$api is already enabled"
+          else
+            echo "Enabling $api..."
+            gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
+          fi
+        done
+
+    - name: 'Verify or Create Artifact Registry Repository'
+      run: |
+        if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
+          echo "Creating Artifact Registry repository..."
+          gcloud artifacts repositories create docker-repo \
+            --repository-format=docker \
+            --location=${{ env.GKE_REGION }} \
+            --description="Docker repository"
         else
-          echo "Repository docker-repo does not exist. Available repositories:"
-          gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
-          exit 1
+          echo "Artifact Registry repository already exists"
         fi
 
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
 
-    - name: Build Docker image
+    - name: Build and Push Docker image
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
         docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
-
-    - name: Push Docker image
-      env:
-        AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
-      run: |
         docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
-      
-    - name: Debug Information
-      if: failure()
+
+    - name: Debug Authentication
       run: |
-        echo "Debug information:"
-        gcloud config list
         gcloud auth list
-        docker images
-        echo "Artifact Registry repositories:"
-        gcloud artifacts repositories list --location=${{ env.GKE_REGION }} || echo "Failed to list repositories"
-        echo "Current permissions:"
-        gcloud artifacts repositories get-iam-policy docker-repo --location=${{ env.GKE_REGION }} || echo "Failed to get repository IAM policy"
+        gcloud config list
+        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
