@@ -23,7 +23,6 @@ jobs:
       with:
         version: 'latest'
         install_components: 'gke-gcloud-auth-plugin'
-
     - name: Install kubectl
       run: |
         sudo apt-get update
@@ -33,7 +32,6 @@ jobs:
         echo "${{ secrets.GCP_SA_KEY_B64 }}" | base64 --decode > /tmp/gcp_key.json
         gcloud auth activate-service-account --key-file=/tmp/gcp_key.json
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
-
     - name: 'Use gcloud CLI'
       run: gcloud info
     - name: Enable necessary APIs
@@ -43,6 +41,7 @@ jobs:
            "container.googleapis.com"
            "cloudresourcemanager.googleapis.com"
            "artifactregistry.googleapis.com"
+           "iam.googleapis.com"
         )
         for api in "${apis_to_enable[@]}"; do
           if gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "$api"; then
@@ -52,14 +51,23 @@ jobs:
            gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
           fi
         done
-
-    - name: Grant Artifact Registry Writer role
+    - name: Grant roles to service account
       run: |
-        gcloud artifacts repositories add-iam-policy-binding docker-repo \
-          --location=${{ env.GKE_REGION }} \
-          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
-          --role=roles/artifactregistry.writer
-
+        SERVICE_ACCOUNT="my-service@my-assignment-432222.iam.gserviceaccount.com"
+        ROLES=(
+          "roles/artifactregistry.writer"
+          "roles/compute.networkAdmin"
+          "roles/compute.securityAdmin"
+          "roles/compute.storageAdmin"
+          "roles/owner"
+          "roles/resourcemanager.projectIamAdmin"
+          "roles/iam.serviceAccountAdmin"
+        )
+        for ROLE in "${ROLES[@]}"; do
+          gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+            --member="serviceAccount:$SERVICE_ACCOUNT" \
+            --role="$ROLE"
+        done
     - name: Create Artifact Registry Repository
       run: |
         if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
@@ -68,23 +76,20 @@ jobs:
         else
           echo "Repository docker-repo already exists."
         fi
-
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker ${{ env.GKE_REGION }}-docker.pkg.dev --quiet
-
     - name: Build and Push Docker image
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
         docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
         docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
-        
     - name: Debug Authentication
       run: |
         gcloud auth list
         gcloud config list
-        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
