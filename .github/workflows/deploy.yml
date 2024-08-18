@@ -9,7 +9,7 @@ env:
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GCP_REGION }}
   IMAGE: assignment-api
-
+  GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_key.json
 jobs:
   setup-build-publish-deploy:
     name: Setup, Build, Publish, and Deploy
@@ -18,7 +18,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
@@ -29,55 +28,45 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y kubectl
-
-    - name: 'Authenticate with GCP'
-      uses: 'google-github-actions/auth@v1'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY_B64 }}'
-
-    - name: 'Set GCP project'
+    - name: 'Decode and authenticate with GCP'
       run: |
+        echo "${{ secrets.GCP_SA_KEY_B64 }}" | base64 --decode > /tmp/gcp_key.json
+        gcloud auth activate-service-account --key-file=/tmp/gcp_key.json
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
 
     - name: 'Use gcloud CLI'
       run: gcloud info
-
     - name: Enable necessary APIs
       run: |
         apis_to_enable=(
-          "compute.googleapis.com"
-          "container.googleapis.com"
-          "cloudresourcemanager.googleapis.com"
-          "artifactregistry.googleapis.com"
+           "compute.googleapis.com"
+           "container.googleapis.com"
+           "cloudresourcemanager.googleapis.com"
+           "artifactregistry.googleapis.com"
         )
         for api in "${apis_to_enable[@]}"; do
           if gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "$api"; then
-            echo "$api is already enabled"
+             echo "$api is already enabled"
           else
-            echo "Enabling $api..."
-            gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
+           echo "Enabling $api..."
+           gcloud services enable $api || echo "Failed to enable $api, it may require manual intervention"
           fi
         done
 
-    - name: 'Verify Artifact Registry Permissions'
+    - name: Grant Artifact Registry Writer role
       run: |
-        if gcloud artifacts repositories get-iam-policy docker-repo --location=${{ env.GKE_REGION }} | grep -q "roles/artifactregistry.writer"; then
-          echo "Service account has Artifact Registry Writer role"
-        else
-          echo "Service account is missing Artifact Registry Writer role. Please add it manually."
-          exit 1
-        fi
+        gcloud artifacts repositories add-iam-policy-binding docker-repo \
+          --location=${{ env.GKE_REGION }} \
+          --member=serviceAccount:${{ secrets.GCP_SA_EMAIL }} \
+          --role=roles/artifactregistry.writer
 
-    - name: 'Verify or Create Artifact Registry Repository'
+    - name: Create Artifact Registry Repository
       run: |
         if ! gcloud artifacts repositories describe docker-repo --location=${{ env.GKE_REGION }} &> /dev/null; then
-          echo "Creating Artifact Registry repository..."
-          gcloud artifacts repositories create docker-repo \
-            --repository-format=docker \
-            --location=${{ env.GKE_REGION }} \
-            --description="Docker repository"
+          gcloud artifacts repositories create docker-repo --repository-format=docker \
+          --location=${{ env.GKE_REGION }} --description="Docker repository"
         else
-          echo "Artifact Registry repository already exists"
+          echo "Repository docker-repo already exists."
         fi
 
     - name: Configure Docker for Artifact Registry
@@ -90,7 +79,7 @@ jobs:
       run: |
         docker build -t $AR_REGISTRY/$IMAGE:${{ github.sha }} .
         docker push $AR_REGISTRY/$IMAGE:${{ github.sha }}
-
+        
     - name: Debug Authentication
       run: |
         gcloud auth list
