@@ -371,10 +371,10 @@ resource "kubernetes_ingress_v1" "assignment" {
   }
 }
 
-resource "google_compute_global_address" "ingress_ip" {
+#resource "google_compute_global_address" "ingress_ip" {
   name = "assignment-ingress-ip"
-}
+#}
 
-output "load_balancer_ip" {
-  value = google_compute_global_address.ingress_ip.address
-}
+#output "load_balancer_ip" {
+#  value = google_compute_global_address.ingress_ip.address
+#}

@@ -116,11 +116,11 @@ jobs:
     
     - name: Verify API
       run: |
-        LOAD_BALANCER_IP=$(kubectl get service assignment-service -n assignment -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        echo "Load Balancer IP: $LOAD_BALANCER_IP"
+        SERVICE_IP=$(kubectl get service assignment-service -n assignment -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        echo "Service IP: $SERVICE_IP"
           
         for i in {1..60}; do
-          response=$(curl -s -o /dev/null -w "%{http_code}" http://$LOAD_BALANCER_IP)
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP)
           if [ $response -eq 200 ]; then
             echo "API is accessible"
             exit 0
