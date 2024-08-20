@@ -41,10 +41,29 @@ This project deploys a containerized API application to Google Kubernetes Engine
 1. Fork this repository.
 
 2. Set up the following secrets in your GitHub repository:
-   - `GCP_PROJECT_ID`: Your Google Cloud Project ID
-   - `GCP_SA_KEY_B64`: Base64 encoded service account key
-   - `GKE_CLUSTER`: Name of your GKE cluster
-   - `GKE_REGION`: GCP region for your resources
+   * `GCP_PROJECT_ID`: Your Google Cloud Project ID
+   * `GCP_SA_KEY_B64`: Base64 encoded service account key
+   * `GKE_CLUSTER`: Name of your GKE cluster
+   * `GKE_REGION`: GCP region for your resources
+   * `DOCKER_IMAGE_NAME`: Name of your Docker image (without registry or tag)
+   * `TF_VAR_VPC_NAME`: Name for your VPC
+   * `TF_VAR_SUBNET_NAME`: Name for your subnet
+   * `TF_VAR_SUBNET_CIDR`: CIDR range for your subnet (e.g., "10.0.0.0/24")
+   * `TF_VAR_NODE_POOL_NAME`: Name for your GKE node pool
+   * `TF_VAR_NODE_COUNT`: Number of nodes in your GKE cluster
+   * `TF_VAR_MACHINE_TYPE`: Machine type for GKE nodes (e.g., "e2-medium")
+   * `TF_VAR_SERVICE_ACCOUNT_ID`: ID for the GKE service account
+   * `TF_VAR_K8S_NAMESPACE`: Kubernetes namespace for your deployment
+   * `TF_VAR_IAM_ROLES_TO_GRANT`: IAM roles to grant (comma-separated)
+   * `TF_VAR_OPEN_PORTS`: Ports to open (comma-separated)
+   * `TF_VAR_CONTAINER_IMAGE`: Full path to your container image (without registry or tag)
+   * `TF_VAR_REPLICAS`: Number of replicas for your deployment
+
+Note: To get the base64 encoded service account key, run:
+
+```
+base64 -w 0 path/to/your-service-account-key.json
+```
 
 3. Enable the following APIs in your GCP project:
    - Compute Engine API
