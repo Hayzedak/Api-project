@@ -8,7 +8,6 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_REGION: ${{ secrets.GCP_REGION }}
-  IMAGE: assignment-api
 
 jobs:
   build-and-push:
@@ -45,17 +44,8 @@ jobs:
       env:
         AR_REGISTRY: ${{ env.GKE_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/docker-repo
       run: |
-        docker build -t $AR_REGISTRY/$IMAGE:latest .
-        docker push $AR_REGISTRY/$IMAGE:latest
-
-    - name: Debug Information
-      if: always()
-      run: |
-        echo "Debugging information:"
-        gcloud info
-        gcloud auth list
-        gcloud config list
-        gcloud artifacts repositories list --location=${{ env.GKE_REGION }}
+        docker build -t $AR_REGISTRY/${{ secrets.DOCKER_IMAGE_NAME }}:latest .
+        docker push $AR_REGISTRY/${{ secrets.DOCKER_IMAGE_NAME }}:latest
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
@@ -78,21 +68,21 @@ jobs:
       run: terraform plan -out=tfplan
       env:
         GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
-        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }} 
+        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
-        TF_VAR_vpc_name: "assignment-vpc"
-        TF_VAR_subnet_name: "assignment-subnet"
-        TF_VAR_subnet_cidr: "10.0.0.0/24"
-        TF_VAR_cluster_name: "assignment-cluster"
-        TF_VAR_node_pool_name: "assignment-node-pool"
-        TF_VAR_node_count: "1"
-        TF_VAR_machine_type: "e2-medium"
-        TF_VAR_service_account_id: "assignment-sa"
-        TF_VAR_k8s_namespace: "assignment"
-        TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
-        TF_VAR_open_ports: '["80", "443", "3000"]'
-        TF_VAR_container_image: "assignment-api"
-        TF_VAR_replicas: "2"
+        TF_VAR_vpc_name: ${{ secrets.TF_VAR_VPC_NAME }}
+        TF_VAR_subnet_name: ${{ secrets.TF_VAR_SUBNET_NAME }}
+        TF_VAR_subnet_cidr: ${{ secrets.TF_VAR_SUBNET_CIDR }}
+        TF_VAR_cluster_name: ${{ secrets.TF_VAR_CLUSTER_NAME }}
+        TF_VAR_node_pool_name: ${{ secrets.TF_VAR_NODE_POOL_NAME }}
+        TF_VAR_node_count: ${{ secrets.TF_VAR_NODE_COUNT }}
+        TF_VAR_machine_type: ${{ secrets.TF_VAR_MACHINE_TYPE }}
+        TF_VAR_service_account_id: ${{ secrets.TF_VAR_SERVICE_ACCOUNT_ID }}
+        TF_VAR_k8s_namespace: ${{ secrets.TF_VAR_K8S_NAMESPACE }}
+        TF_VAR_iam_roles_to_grant: ${{ secrets.TF_VAR_IAM_ROLES_TO_GRANT }}
+        TF_VAR_open_ports: ${{ secrets.TF_VAR_OPEN_PORTS }}
+        TF_VAR_container_image: ${{ secrets.TF_VAR_CONTAINER_IMAGE }}
+        TF_VAR_replicas: ${{ secrets.TF_VAR_REPLICAS }}        
 
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
@@ -100,19 +90,19 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
         TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
         TF_VAR_region: ${{ secrets.GCP_REGION }}
-        TF_VAR_vpc_name: "assignment-vpc"
-        TF_VAR_subnet_name: "assignment-subnet"
-        TF_VAR_subnet_cidr: "10.0.0.0/24"
-        TF_VAR_cluster_name: "assignment-cluster"
-        TF_VAR_node_pool_name: "assignment-node-pool"
-        TF_VAR_node_count: "1"
-        TF_VAR_machine_type: "e2-medium"
-        TF_VAR_service_account_id: "assignment-sa"
-        TF_VAR_k8s_namespace: "assignment"
-        TF_VAR_iam_roles_to_grant: '["roles/container.developer", "roles/storage.objectViewer"]'
-        TF_VAR_open_ports: '["80", "443", "3000"]'
-        TF_VAR_container_image: "assignment-api"
-        TF_VAR_replicas: "2"
+        TF_VAR_vpc_name: ${{ secrets.TF_VAR_VPC_NAME }}
+        TF_VAR_subnet_name: ${{ secrets.TF_VAR_SUBNET_NAME }}
+        TF_VAR_subnet_cidr: ${{ secrets.TF_VAR_SUBNET_CIDR }}
+        TF_VAR_cluster_name: ${{ secrets.TF_VAR_CLUSTER_NAME }}
+        TF_VAR_node_pool_name: ${{ secrets.TF_VAR_NODE_POOL_NAME }}
+        TF_VAR_node_count: ${{ secrets.TF_VAR_NODE_COUNT }}
+        TF_VAR_machine_type: ${{ secrets.TF_VAR_MACHINE_TYPE }}
+        TF_VAR_service_account_id: ${{ secrets.TF_VAR_SERVICE_ACCOUNT_ID }}
+        TF_VAR_k8s_namespace: ${{ secrets.TF_VAR_K8S_NAMESPACE }}
+        TF_VAR_iam_roles_to_grant: ${{ secrets.TF_VAR_IAM_ROLES_TO_GRANT }}
+        TF_VAR_open_ports: ${{ secrets.TF_VAR_OPEN_PORTS }}
+        TF_VAR_container_image: ${{ secrets.TF_VAR_CONTAINER_IMAGE }}
+        TF_VAR_replicas: ${{ secrets.TF_VAR_REPLICAS }}        
     
     - name: Verify API
       run: |
