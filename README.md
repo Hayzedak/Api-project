@@ -26,12 +26,11 @@ This project deploys a containerized API application to Google Kubernetes Engine
 ├── .github
 │   └── workflows
 │       └── deploy.yml
-├── terraform
-│   ├── main.tf
-│   └── variables.tf
+├── .gitignore
+├── main.tf
+├── variables.tf
 ├── app.py
-└── requirements.txt
-│  
+├── requirements.txt  
 ├── Dockerfile
 └── README.md
 ```
